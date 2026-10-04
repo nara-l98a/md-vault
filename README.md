@@ -10,8 +10,8 @@ A private, local-first Markdown notebook for collecting searchable knowledge. It
 ## Install
 
 ```bash
-git clone https://github.com/nara-l98a/md-vault-cli.git
-cd md-vault-cli
+git clone https://github.com/nara-l98a/md-vault.git
+cd md-vault
 python3 -m venv .venv
 . .venv/bin/activate
 pip install .
