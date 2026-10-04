@@ -8,6 +8,7 @@ import re
 import sqlite3
 import sys
 import unicodedata
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -209,6 +210,42 @@ def all_tags(conn: sqlite3.Connection) -> list[tuple[str, int]]:
     return sorted(counts.items(), key=lambda item: item[0])
 
 
+def export_vault(root: Path, conn: sqlite3.Connection, destination: str | Path) -> int:
+    """Export managed Markdown notes and metadata to a new ZIP without altering the vault."""
+    target = Path(destination).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    rows = conn.execute("SELECT * FROM notes ORDER BY id").fetchall()
+    entries: list[tuple[str, Path]] = []
+    manifest = []
+    for row in rows:
+        rel = Path(row["file_path"])
+        if rel.is_absolute() or ".." in rel.parts:
+            raise ValueError(f"unsafe note path in index: {row['file_path']}")
+        source = (root / rel).resolve()
+        try:
+            source.relative_to(root.resolve())
+        except ValueError as exc:
+            raise ValueError(f"note path escapes vault: {row['file_path']}") from exc
+        if not source.is_file():
+            raise ValueError(f"note file is missing: {row['file_path']}")
+        entries.append((rel.as_posix(), source))
+        manifest.append({"id": row["id"], "title": row["title"], "tags": json.loads(row["tags"]),
+                         "path": rel.as_posix(), "created_at": row["created_at"],
+                         "updated_at": row["updated_at"]})
+    if target.exists():
+        raise FileExistsError(f"refusing to overwrite existing export: {target}")
+    try:
+        with zipfile.ZipFile(target, mode="x", compression=zipfile.ZIP_DEFLATED) as archive:
+            for archive_name, source in entries:
+                archive.write(source, archive_name)
+            archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    except Exception:
+        if target.exists():
+            target.unlink()
+        raise
+    return len(entries)
+
+
 def reindex(root: Path, conn: sqlite3.Connection) -> int:
     """Rebuild SQLite records and FTS index from managed Markdown files."""
     pattern = re.compile(r"^<!-- mdvault:id=(\d+) -->\s*$", re.M)
@@ -284,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
     delete.add_argument("id", type=_positive_id)
     sub.add_parser("tags", help="list tags and note counts")
     sub.add_parser("reindex", help="rebuild the catalogue from Markdown files")
+    export = sub.add_parser("export", help="export managed Markdown notes and metadata to a new ZIP")
+    export.add_argument("filename", help="new ZIP path (existing files are never overwritten)")
     return parser
 
 
@@ -329,6 +368,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "reindex":
             count = reindex(root, conn)
             print(f"Reindexed {count} Markdown note(s).")
+        elif args.command == "export":
+            count = export_vault(root, conn, args.filename)
+            print(f"Exported {count} Markdown note(s) to {args.filename}")
         return 0
     except (ValueError, OSError, sqlite3.Error) as exc:
         print(f"mdvault: error: {exc}", file=sys.stderr)

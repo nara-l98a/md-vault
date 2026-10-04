@@ -3,10 +3,11 @@ import io
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
-from mdvault.app import (add_note, all_tags, connect_vault, delete_note, list_notes,
-                         main, reindex, search_notes, update_note)
+from mdvault.app import (add_note, all_tags, connect_vault, delete_note, export_vault,
+                         list_notes, main, reindex, search_notes, update_note)
 
 
 class VaultTests(unittest.TestCase):
@@ -71,6 +72,17 @@ class VaultTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             self.assertEqual(main(["--vault", str(self.root), "search", "example"]), 0)
         self.assertIn("CLI Note", output.getvalue())
+
+    def test_export_archive_and_refuse_overwrite(self):
+        row = add_note(self.root, self.conn, "Release Plan", "Ship the tested package.", ["work"])
+        archive_path = Path(self.tmp.name) / "vault-export.zip"
+        self.assertEqual(export_vault(self.root, self.conn, archive_path), 1)
+        with zipfile.ZipFile(archive_path) as archive:
+            self.assertIn(row["file_path"], archive.namelist())
+            self.assertIn("manifest.json", archive.namelist())
+            self.assertIn("Ship the tested package", archive.read(row["file_path"]).decode())
+        with self.assertRaisesRegex(FileExistsError, "refusing to overwrite"):
+            export_vault(self.root, self.conn, archive_path)
 
 
 if __name__ == "__main__":

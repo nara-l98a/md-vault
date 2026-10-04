@@ -41,6 +41,9 @@ mdvault --vault ~/Notes/vault tags
 mdvault --vault ~/Notes/vault update 1 --body "Updated response checklist with a recovery review."
 mdvault --vault ~/Notes/vault reindex
 
+# Export managed Markdown files plus a metadata manifest; existing archives are not overwritten.
+mdvault --vault ~/Notes/vault export ~/Backups/notes-2026-04.zip
+
 # Remove a note from the catalogue and delete its managed Markdown file.
 mdvault --vault ~/Notes/vault delete 1
 ```
@@ -77,10 +80,12 @@ By default, the vault is `~/Documents/md-vault`. Select a different location wit
 | `delete ID` | Delete a note and its Markdown file |
 | `tags` | List tags and their note counts |
 | `reindex` | Rebuild the SQLite catalogue and full-text index from note files |
+| `export FILE.zip` | Create a ZIP of managed Markdown notes and a JSON metadata manifest; refuses to overwrite |
 
 ## Development and tests
 
 ```bash
+python -m pip install -e .
 python -m unittest discover -s tests -v
 ```
 
