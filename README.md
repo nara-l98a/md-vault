@@ -98,3 +98,21 @@ Your note contents remain on your machine. The SQLite database may include a sea
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## 中文使用说明
+
+`mdvault` 是一个只在本机读写的 Markdown 笔记库：笔记内容保存在 `notes/`，SQLite 仅作为可重建的搜索索引。程序不发起网络请求，也不会上传笔记。
+
+```bash
+# 使用中文标题、正文和标签
+mdvault --vault ~/Notes/vault add \
+  --title "发布检查清单" \
+  --body "确认测试、备份和回滚方案。" \
+  --tags 发布 运维
+
+# 外部编辑 Markdown 后重建索引
+mdvault --vault ~/Notes/vault reindex
+```
+
+导出会创建一个新的 ZIP（若目标已存在则拒绝覆盖）。索引中的笔记路径必须位于 vault 内；发现未管理的 Markdown 或路径逃逸时，`reindex`/`export` 会报错而不继续操作。

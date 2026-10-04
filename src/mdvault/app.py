@@ -71,8 +71,22 @@ def _render_markdown(note_id: int, title: str, tags: list[str], created: str, bo
             f"{body.rstrip()}\n")
 
 
+def _managed_path(root: Path, relative: str) -> Path:
+    """Resolve an indexed path and reject absolute or escaping paths."""
+    rel = Path(relative)
+    if rel.is_absolute() or ".." in rel.parts:
+        raise ValueError(f"unsafe note path in index: {relative}")
+    root = root.resolve()
+    path = (root / rel).resolve(strict=False)
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"note path escapes vault: {relative}") from exc
+    return path
+
+
 def _write_note(root: Path, row: sqlite3.Row | dict) -> None:
-    path = root / row["file_path"]
+    path = _managed_path(root, row["file_path"])
     path.parent.mkdir(parents=True, exist_ok=True)
     data = _render_markdown(row["id"], row["title"], json.loads(row["tags"]), row["created_at"], row["body"])
     temp = path.with_suffix(path.suffix + ".tmp")
@@ -151,7 +165,7 @@ def update_note(root: Path, conn: sqlite3.Connection, note_id: int,
 
 def delete_note(root: Path, conn: sqlite3.Connection, note_id: int) -> None:
     row = _note(conn, note_id)
-    path = root / row["file_path"]
+    path = _managed_path(root, row["file_path"])
     tombstone = path.with_suffix(path.suffix + ".deleting")
     if path.exists():
         path.replace(tombstone)
@@ -219,13 +233,7 @@ def export_vault(root: Path, conn: sqlite3.Connection, destination: str | Path) 
     manifest = []
     for row in rows:
         rel = Path(row["file_path"])
-        if rel.is_absolute() or ".." in rel.parts:
-            raise ValueError(f"unsafe note path in index: {row['file_path']}")
-        source = (root / rel).resolve()
-        try:
-            source.relative_to(root.resolve())
-        except ValueError as exc:
-            raise ValueError(f"note path escapes vault: {row['file_path']}") from exc
+        source = _managed_path(root, row["file_path"])
         if not source.is_file():
             raise ValueError(f"note file is missing: {row['file_path']}")
         entries.append((rel.as_posix(), source))

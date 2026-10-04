@@ -73,6 +73,15 @@ class VaultTests(unittest.TestCase):
             self.assertEqual(main(["--vault", str(self.root), "search", "example"]), 0)
         self.assertIn("CLI Note", output.getvalue())
 
+    def test_rejects_index_path_escape_before_file_operations(self):
+        row = add_note(self.root, self.conn, "Safe", "Do not escape the vault.")
+        outside = Path(self.tmp.name) / "outside.md"
+        self.conn.execute("UPDATE notes SET file_path=? WHERE id=?", ("../outside.md", row["id"]))
+        self.conn.commit()
+        with self.assertRaisesRegex(ValueError, "unsafe note path"):
+            export_vault(self.root, self.conn, Path(self.tmp.name) / "export.zip")
+        self.assertFalse(outside.exists())
+
     def test_export_archive_and_refuse_overwrite(self):
         row = add_note(self.root, self.conn, "Release Plan", "Ship the tested package.", ["work"])
         archive_path = Path(self.tmp.name) / "vault-export.zip"
